@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Bootfriend - Seu Amigo Cão</title>
+    <title>Bootfriend - Rápido e Curto</title>
     <style>
         body { margin: 0; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: 'Segoe UI', sans-serif; color: white; }
         #video-container { width: 800px; height: 600px; position: relative; border-radius: 15px; overflow: hidden; box-shadow: 0 0 25px #2ecc71; }
@@ -11,7 +11,7 @@
         button { padding: 12px 28px; font-size: 1.2rem; border-radius: 40px; border: none; background: #2ecc71; color: white; font-weight: bold; margin: 20px 10px 10px; cursor: pointer; }
         button:hover { background: #27ae60; }
         #status { background: rgba(0,0,0,0.7); padding: 8px 20px; border-radius: 30px; margin-top: 15px; color: #f1c40f; text-align: center; }
-        .log { background: #1e1e2f; padding: 8px 12px; border-radius: 12px; font-family: monospace; font-size: 0.7rem; max-width: 800px; margin-top: 15px; overflow-y: auto; max-height: 150px; width: 80%; color: #ccc; }
+        .log { background: #1e1e2f; padding: 8px 12px; border-radius: 12px; font-family: monospace; font-size: 0.7rem; max-width: 800px; margin-top: 15px; overflow-y: auto; max-height: 120px; width: 80%; color: #ccc; display: none; } /* esconde o log para ficar mais limpo, mas você pode mostrar se quiser */
     </style>
 </head>
 <body>
@@ -24,81 +24,62 @@
     <button id="btn-reiniciar" style="display:none;">🔄 REINICIAR</button>
 </div>
 <div id="status">🔘 Clique no botão verde para começar</div>
-<div class="log" id="log-area">📋 <span>Log:</span><br>✅ Pronto! Clique em ATIVAR.</div>
 
 <script>
-    // SUA CHAVE DA MISTRAL JÁ ESTÁ AQUI
     const MISTRAL_API_KEY = "izShTxzAgCk8eqaODmq0LTw9P1AbEDtr";
     
     const vEsp = document.getElementById('vid-esperando');
     const vFal = document.getElementById('vid-falando');
     const statusDiv = document.getElementById('status');
-    const logDiv = document.getElementById('log-area');
     const btnIniciar = document.getElementById('btn-iniciar');
     const btnReiniciar = document.getElementById('btn-reiniciar');
     let escutaAtiva = false;
     let recognition = null;
 
-    function addLog(msg, isError = false) {
-        const line = document.createElement('div');
-        line.innerHTML = `📌 ${new Date().toLocaleTimeString()} - ${isError ? '❌ ' : '✓ '}${msg}`;
-        line.style.color = isError ? '#ffaaaa' : '#aaffcc';
-        logDiv.appendChild(line);
-        logDiv.scrollTop = logDiv.scrollHeight;
-    }
-
     function falar(texto) {
         return new Promise((resolve) => {
             window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(texto);
+            // Limpa descrições de ações (ex: "*balançando o rabo*")
+            let textoLimpo = texto.replace(/[*_~].*?[*_~]/g, '').replace(/\([^)]*\)/g, '').trim();
+            // Se ficou muito longo, corta na primeira frase
+            if (textoLimpo.length > 100) {
+                textoLimpo = textoLimpo.split(/[.!?]/)[0] + '.';
+            }
+            const utterance = new SpeechSynthesisUtterance(textoLimpo);
             utterance.lang = 'pt-BR';
             utterance.rate = 0.9;
             utterance.pitch = 1.2;
             utterance.onstart = () => {
-                addLog(`🗣️ Falando: "${texto.substring(0, 80)}"`);
                 vEsp.classList.remove('ativo');
                 vFal.classList.add('ativo');
-                vFal.play().catch(e => addLog(`Vídeo falando: ${e.message}`, true));
-                statusDiv.innerText = "💬 Bootfriend falando...";
+                vFal.play().catch(e => console.log(e));
+                statusDiv.innerText = "💬 " + textoLimpo;
             };
             utterance.onend = () => {
                 vFal.classList.remove('ativo');
                 vEsp.classList.add('ativo');
-                vEsp.play().catch(e => addLog(`Vídeo esperando: ${e.message}`, true));
+                vEsp.play().catch(e => console.log(e));
                 statusDiv.innerText = "🎧 Ouvindo... fale algo!";
                 resolve();
                 if (escutaAtiva === false && btnReiniciar.style.display !== 'none') iniciarEscuta();
             };
-            utterance.onerror = (err) => { addLog(`Erro fala: ${err.error}`, true); resolve(); iniciarEscuta(); };
+            utterance.onerror = () => { resolve(); iniciarEscuta(); };
             window.speechSynthesis.speak(utterance);
         });
     }
 
-    // Função de respostas locais (caso a internet falhe)
-    function respostaLocal(pergunta) {
-        const p = pergunta.toLowerCase();
-        if (p.includes("oi") || p.includes("olá")) return "Au au! Oi, amigo! Como você está?";
-        if (p.includes("tudo bem")) return "Au au! Tudo bem sim, e você?";
-        if (p.includes("nome")) return "Meu nome é Bootfriend! Sou seu amigo cachorrinho!";
-        if (p.includes("brincar")) return "Au au! Adoro brincar! Vamos conversar?";
-        if (p.includes("obrigado")) return "Au au! De nada, amigo!";
-        if (p.includes("tchau")) return "Au au! Até logo! Volte sempre!";
-        return "Au au! Conte-me mais, estou ouvindo!";
-    }
-
     async function perguntarMistral(pergunta) {
-        addLog(`🧠 Enviando para Mistral AI: "${pergunta}"`);
-        statusDiv.innerText = "🤖 Bootfriend pensando...";
+        statusDiv.innerText = "🤔 Pensando...";
         try {
             const url = "https://api.mistral.ai/v1/chat/completions";
             const payload = {
-                model: "mistral-small-latest",
+                model: "mistral-tiny", // modelo mais rápido
                 messages: [
-                    { role: "system", content: "Você é um cachorrinho fofo chamado Bootfriend. Responda frases curtas e alegres, máximo duas frases. Use 'au au' às vezes." },
+                    { role: "system", content: "Você é um cachorrinho chamado Bootfriend. Responda APENAS com UMA frase curta, no máximo 6 palavras. NUNCA descreva ações. Use 'au au' se quiser. Exemplo: 'Au au! Estou feliz!'" },
                     { role: "user", content: pergunta }
                 ],
-                temperature: 0.8,
-                max_tokens: 70
+                temperature: 0.5,
+                max_tokens: 30
             };
             const response = await fetch(url, {
                 method: 'POST',
@@ -106,46 +87,43 @@
                 body: JSON.stringify(payload)
             });
             const data = await response.json();
-            addLog(`📦 Resposta: ${JSON.stringify(data).substring(0, 200)}`);
-            if (data.error) {
-                addLog(`❌ Erro: ${data.error.message}`, true);
-                return respostaLocal(pergunta);
-            }
             if (data.choices && data.choices[0] && data.choices[0].message) {
-                return data.choices[0].message.content;
+                let resposta = data.choices[0].message.content;
+                // Remove ações entre asteriscos ou parênteses
+                resposta = resposta.replace(/[*_~].*?[*_~]/g, '').replace(/\([^)]*\)/g, '').trim();
+                if (resposta.length > 80) resposta = resposta.substring(0, 80);
+                return resposta;
             } else {
-                return respostaLocal(pergunta);
+                return "Au au!";
             }
         } catch (err) {
-            addLog(`🔥 Erro: ${err.message}`, true);
-            return respostaLocal(pergunta);
+            return "Au au! Fale de novo.";
         }
     }
 
     function iniciarEscuta() {
         const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRec) { addLog("❌ Seu navegador não suporta microfone. Use Chrome.", true); return; }
+        if (!SpeechRec) { statusDiv.innerText = "Seu navegador não suporta microfone. Use Chrome."; return; }
         if (escutaAtiva) { try { recognition?.stop(); } catch(e) {} }
         recognition = new SpeechRec();
         recognition.lang = 'pt-BR';
         recognition.continuous = false;
         recognition.interimResults = false;
-        recognition.onstart = () => { escutaAtiva = true; addLog("🎤 Microfone ativo - fale agora"); statusDiv.innerText = "🎙️ Escutando..."; };
+        recognition.onstart = () => { escutaAtiva = true; statusDiv.innerText = "🎙️ Escutando... fale!"; };
         recognition.onerror = (e) => {
-            addLog(`Erro microfone: ${e.error}`, true);
             escutaAtiva = false;
             if (e.error === 'no-speech') setTimeout(() => { if (!window.speechSynthesis.speaking) iniciarEscuta(); }, 1500);
+            else statusDiv.innerText = "Erro no microfone. Tente reiniciar.";
         };
-        recognition.onend = () => { addLog("🎤 Microfone desligado"); escutaAtiva = false; if (!window.speechSynthesis.speaking) setTimeout(iniciarEscuta, 800); };
+        recognition.onend = () => { escutaAtiva = false; if (!window.speechSynthesis.speaking) setTimeout(iniciarEscuta, 800); };
         recognition.onresult = async (event) => {
             const fala = event.results[0][0].transcript;
-            addLog(`🎙️ Você: "${fala}"`);
             statusDiv.innerText = "💭 Processando...";
             recognition.stop(); escutaAtiva = false;
             const resposta = await perguntarMistral(fala);
             await falar(resposta);
         };
-        try { recognition.start(); } catch(err) { addLog(`Falha: ${err}`, true); }
+        try { recognition.start(); } catch(err) { statusDiv.innerText = "Erro ao iniciar microfone."; }
     }
 
     function reiniciar() {
@@ -154,7 +132,7 @@
         escutaAtiva = false;
         vFal.classList.remove('ativo');
         vEsp.classList.add('ativo');
-        vEsp.play().catch(e => addLog(`Vídeo: ${e.message}`, true));
+        vEsp.play().catch(e => {});
         statusDiv.innerText = "Reiniciado. Clique em ATIVAR.";
         btnIniciar.style.display = "inline-block";
         btnReiniciar.style.display = "none";
@@ -163,13 +141,11 @@
     btnIniciar.onclick = async () => {
         btnIniciar.style.display = "none";
         btnReiniciar.style.display = "inline-block";
-        addLog("🎬 Iniciando Bootfriend...");
         vEsp.load(); vFal.load();
-        try { await vEsp.play(); } catch(e) { addLog("⚠️ Vídeo não tocou automático", true); }
-        await falar("Oi, amigo! Estou pronto! Pode falar comigo.");
+        try { await vEsp.play(); } catch(e) {}
+        await falar("Oi, amigo! Fale comigo!");
     };
     btnReiniciar.onclick = reiniciar;
-    addLog("🔑 Bootfriend com Mistral AI - pronto para uso!");
 </script>
 </body>
 </html>
