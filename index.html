@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Bootfriend - Sem movimentos, só fala</title>
+    <title>Bootfriend - Estável e sem movimentos</title>
     <style>
         body { margin: 0; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: 'Segoe UI', sans-serif; color: white; }
         #video-container { width: 800px; height: 600px; position: relative; border-radius: 15px; overflow: hidden; box-shadow: 0 0 25px #2ecc71; }
@@ -23,8 +23,8 @@
     <button id="btn-iniciar">🐕 ATIVAR BOOTFRIEND</button>
     <button id="btn-reiniciar" style="display:none;">🔄 REINICIAR</button>
 </div>
-<div id="status">🔘 Clique no botão verde para começar</div>
-<div class="log" id="log-area">📋 <span>Log:</span><br>✅ Pronto! Clique em ATIVAR.</div>
+<div id="status">🔘 Clique no botão verde</div>
+<div class="log" id="log-area">📋 <span>Log:</span><br>✅ Pronto!</div>
 
 <script>
     const MISTRAL_API_KEY = "izShTxzAgCk8eqaODmq0LTw9P1AbEDtr";
@@ -37,6 +37,7 @@
     const btnReiniciar = document.getElementById('btn-reiniciar');
     let escutaAtiva = false;
     let recognition = null;
+    let falandoAtualmente = false; // Evita sobreposição de fala
 
     function addLog(msg, isError = false) {
         const line = document.createElement('div');
@@ -46,12 +47,30 @@
         logDiv.scrollTop = logDiv.scrollHeight;
     }
 
+    // Função para limpar texto de movimentos
+    function limparMovimentos(texto) {
+        // Remove qualquer coisa entre asteriscos
+        let limpo = texto.replace(/\*[^*]*\*/g, '');
+        // Remove palavras comuns de ação
+        limpo = limpo.replace(/\b(balançando|abanando|rabo|pata|orelha|latindo|pulando|correndo|sentado|deitado|movendo|gesticulando)\b/gi, '');
+        // Remove emojis de animais ou outros (opcional)
+        limpo = limpo.replace(/[🐶🐕🐩🐾]/g, '');
+        // Remove espaços extras
+        limpo = limpo.replace(/\s+/g, ' ').trim();
+        if (limpo === '') return 'Au au!';
+        return limpo;
+    }
+
     function falar(texto) {
         return new Promise((resolve) => {
+            if (falandoAtualmente) {
+                resolve();
+                return;
+            }
+            falandoAtualmente = true;
             window.speechSynthesis.cancel();
-            // Remove qualquer coisa entre asteriscos (movimentos)
-            let textoLimpo = texto.replace(/\*[^*]*\*/g, '').replace(/\s+/g, ' ').trim();
-            if (textoLimpo === '') textoLimpo = "Au au!";
+            let textoLimpo = limparMovimentos(texto);
+            if (textoLimpo.length === 0) textoLimpo = "Au au!";
             const utterance = new SpeechSynthesisUtterance(textoLimpo);
             utterance.lang = 'pt-BR';
             utterance.rate = 0.9;
@@ -60,50 +79,58 @@
                 addLog(`🗣️ Falando: "${textoLimpo.substring(0, 80)}"`);
                 vEsp.classList.remove('ativo');
                 vFal.classList.add('ativo');
-                vFal.play().catch(e => addLog(`Vídeo: ${e.message}`, true));
-                statusDiv.innerText = "💬 Bootfriend falando...";
+                vFal.play().catch(e => addLog(`Vídeo falando: ${e.message}`, true));
+                statusDiv.innerText = "💬 Falando...";
             };
             utterance.onend = () => {
                 vFal.classList.remove('ativo');
                 vEsp.classList.add('ativo');
-                vEsp.play().catch(e => addLog(`Vídeo: ${e.message}`, true));
-                statusDiv.innerText = "🎧 Ouvindo... fale algo!";
+                vEsp.play().catch(e => addLog(`Vídeo esperando: ${e.message}`, true));
+                statusDiv.innerText = "🎧 Ouvindo...";
+                falandoAtualmente = false;
                 resolve();
-                if (escutaAtiva === false && btnReiniciar.style.display !== 'none') iniciarEscuta();
+                // Aguarda um pouco para não sobrecarregar e reinicia escuta
+                setTimeout(() => {
+                    if (escutaAtiva === false && btnReiniciar.style.display !== 'none') {
+                        iniciarEscuta();
+                    }
+                }, 300);
             };
-            utterance.onerror = (err) => { addLog(`Erro fala: ${err.error}`, true); resolve(); iniciarEscuta(); };
+            utterance.onerror = (err) => {
+                addLog(`Erro fala: ${err.error}`, true);
+                falandoAtualmente = false;
+                resolve();
+                setTimeout(() => iniciarEscuta(), 500);
+            };
             window.speechSynthesis.speak(utterance);
         });
     }
 
+    // Respostas locais de emergência
     function respostaLocal(pergunta) {
         const p = pergunta.toLowerCase();
-        if (p.includes("oi") || p.includes("olá")) return "Au au! Oi, amigo! Como você está?";
-        if (p.includes("tudo bem")) return "Au au! Tudo bem sim, e você?";
-        if (p.includes("nome")) return "Meu nome é Bootfriend! Sou seu amigo cachorrinho!";
-        if (p.includes("brincar")) return "Au au! Adoro brincar! Vamos conversar?";
-        if (p.includes("obrigado")) return "Au au! De nada, amigo!";
-        if (p.includes("tchau")) return "Au au! Até logo! Volte sempre!";
-        return "Au au! Conte-me mais, estou ouvindo!";
+        if (p.includes("oi") || p.includes("olá")) return "Au au! Oi, amigo!";
+        if (p.includes("tudo bem")) return "Au au! Tudo bem, e você?";
+        if (p.includes("nome")) return "Meu nome é Bootfriend!";
+        if (p.includes("brincar")) return "Au au! Adoro brincar!";
+        if (p.includes("obrigado")) return "Au au! De nada!";
+        if (p.includes("tchau")) return "Au au! Até logo!";
+        return "Au au! Conte-me mais.";
     }
 
     async function perguntarMistral(pergunta) {
-        addLog(`🧠 Enviando para Mistral: "${pergunta}"`);
-        statusDiv.innerText = "🤖 Bootfriend pensando...";
+        addLog(`🧠 Enviando: "${pergunta}"`);
+        statusDiv.innerText = "🤖 Pensando...";
         try {
-            // Usando modelo mais rápido (open-mistral-7b)
             const url = "https://api.mistral.ai/v1/chat/completions";
             const payload = {
-                model: "open-mistral-7b",  // mais rápido que o small-latest
+                model: "open-mistral-7b",
                 messages: [
-                    { 
-                        role: "system", 
-                        content: "Você é um cachorrinho chamado Bootfriend. Responda APENAS com a fala do cachorro, sem descrever ações ou movimentos. Não use asteriscos. Frases curtas, máximo 8 palavras. Use 'au au' às vezes." 
-                    },
+                    { role: "system", content: "Você é um cachorro chamado Bootfriend. Responda SOMENTE com a fala do cachorro, NUNCA descreva ações. Proibido usar asteriscos. Proibido falar de rabo, pata, balançar, latir, etc. Frases curtas, máximo 2 frases. Use 'au au' com moderação." },
                     { role: "user", content: pergunta }
                 ],
-                temperature: 0.7,
-                max_tokens: 40
+                temperature: 0.5,
+                max_tokens: 35
             };
             const response = await fetch(url, {
                 method: 'POST',
@@ -111,54 +138,70 @@
                 body: JSON.stringify(payload)
             });
             const data = await response.json();
-            addLog(`📦 Resposta recebida`);
             if (data.error) {
-                addLog(`❌ Erro: ${data.error.message}`, true);
+                addLog(`❌ API erro: ${data.error.message}`, true);
                 return respostaLocal(pergunta);
             }
             if (data.choices && data.choices[0] && data.choices[0].message) {
                 let resposta = data.choices[0].message.content;
-                // Remove qualquer descrição de movimento
-                resposta = resposta.replace(/\*[^*]*\*/g, '').replace(/balançando|abanando|rabo|pata|orelha/gi, '').replace(/\s+/g, ' ').trim();
+                resposta = limparMovimentos(resposta);
                 if (resposta.length === 0) return "Au au!";
                 return resposta;
             } else {
                 return respostaLocal(pergunta);
             }
         } catch (err) {
-            addLog(`🔥 Erro: ${err.message}`, true);
+            addLog(`🔥 Erro rede: ${err.message}`, true);
             return respostaLocal(pergunta);
         }
     }
 
     function iniciarEscuta() {
+        if (falandoAtualmente) {
+            addLog("⏳ Aguardando fim da fala para escutar...");
+            return;
+        }
+        if (escutaAtiva) {
+            try { recognition?.stop(); } catch(e) {}
+        }
         const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRec) { addLog("❌ Navegador sem microfone.", true); return; }
-        if (escutaAtiva) { try { recognition?.stop(); } catch(e) {} }
+        if (!SpeechRec) { addLog("❌ Microfone não suportado.", true); return; }
         recognition = new SpeechRec();
         recognition.lang = 'pt-BR';
         recognition.continuous = false;
         recognition.interimResults = false;
-        recognition.onstart = () => { escutaAtiva = true; addLog("🎤 Microfone ativo - fale"); statusDiv.innerText = "🎙️ Escutando..."; };
+        recognition.onstart = () => { escutaAtiva = true; addLog("🎤 Microfone ativo - fale agora"); statusDiv.innerText = "🎙️ Escutando..."; };
         recognition.onerror = (e) => {
-            addLog(`Erro: ${e.error}`, true);
+            addLog(`Erro microfone: ${e.error}`, true);
             escutaAtiva = false;
-            if (e.error === 'no-speech') setTimeout(() => { if (!window.speechSynthesis.speaking) iniciarEscuta(); }, 1500);
+            if (e.error === 'no-speech') {
+                setTimeout(() => { if (!falandoAtualmente && btnReiniciar.style.display !== 'none') iniciarEscuta(); }, 1500);
+            } else if (e.error === 'network') {
+                setTimeout(() => { if (!falandoAtualmente && btnReiniciar.style.display !== 'none') iniciarEscuta(); }, 2000);
+            }
         };
-        recognition.onend = () => { addLog("🎤 Desligado"); escutaAtiva = false; if (!window.speechSynthesis.speaking) setTimeout(iniciarEscuta, 800); };
+        recognition.onend = () => {
+            addLog("🎤 Microfone desligado");
+            escutaAtiva = false;
+            if (!falandoAtualmente && btnReiniciar.style.display !== 'none') {
+                setTimeout(iniciarEscuta, 800);
+            }
+        };
         recognition.onresult = async (event) => {
             const fala = event.results[0][0].transcript;
             addLog(`🎙️ Você: "${fala}"`);
             statusDiv.innerText = "💭 Pensando...";
-            recognition.stop(); escutaAtiva = false;
+            recognition.stop();
+            escutaAtiva = false;
             const resposta = await perguntarMistral(fala);
             await falar(resposta);
         };
-        try { recognition.start(); } catch(err) { addLog(`Falha: ${err}`, true); }
+        try { recognition.start(); } catch(err) { addLog(`Falha: ${err}`, true); escutaAtiva = false; }
     }
 
     function reiniciar() {
         window.speechSynthesis.cancel();
+        falandoAtualmente = false;
         if (recognition) { try { recognition.stop(); } catch(e) {} }
         escutaAtiva = false;
         vFal.classList.remove('ativo');
@@ -172,13 +215,13 @@
     btnIniciar.onclick = async () => {
         btnIniciar.style.display = "none";
         btnReiniciar.style.display = "inline-block";
-        addLog("🎬 Iniciando Bootfriend...");
+        addLog("🎬 Iniciando...");
         vEsp.load(); vFal.load();
-        try { await vEsp.play(); } catch(e) { addLog("⚠️ Vídeo não tocou", true); }
+        try { await vEsp.play(); } catch(e) { addLog("⚠️ Vídeo não tocou automático", true); }
         await falar("Oi, amigo! Estou pronto! Pode falar comigo.");
     };
     btnReiniciar.onclick = reiniciar;
-    addLog("🔑 Bootfriend com Mistral - sem descrições de movimento e resposta mais rápida!");
+    addLog("🔑 Bootfriend versão estável - sem movimentos e com reconexão automática");
 </script>
 </body>
 </html>
