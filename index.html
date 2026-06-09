@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Bootfriend - Estável e sem movimentos</title>
+    <title>Bootfriend - Voz de Criança</title>
     <style>
         body { margin: 0; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: 'Segoe UI', sans-serif; color: white; }
         #video-container { width: 800px; height: 600px; position: relative; border-radius: 15px; overflow: hidden; box-shadow: 0 0 25px #2ecc71; }
@@ -37,7 +37,8 @@
     const btnReiniciar = document.getElementById('btn-reiniciar');
     let escutaAtiva = false;
     let recognition = null;
-    let falandoAtualmente = false; // Evita sobreposição de fala
+    let falandoAtualmente = false;
+    let tentativaReinicio = false;
 
     function addLog(msg, isError = false) {
         const line = document.createElement('div');
@@ -47,20 +48,16 @@
         logDiv.scrollTop = logDiv.scrollHeight;
     }
 
-    // Função para limpar texto de movimentos
     function limparMovimentos(texto) {
-        // Remove qualquer coisa entre asteriscos
         let limpo = texto.replace(/\*[^*]*\*/g, '');
-        // Remove palavras comuns de ação
         limpo = limpo.replace(/\b(balançando|abanando|rabo|pata|orelha|latindo|pulando|correndo|sentado|deitado|movendo|gesticulando)\b/gi, '');
-        // Remove emojis de animais ou outros (opcional)
         limpo = limpo.replace(/[🐶🐕🐩🐾]/g, '');
-        // Remove espaços extras
         limpo = limpo.replace(/\s+/g, ' ').trim();
         if (limpo === '') return 'Au au!';
         return limpo;
     }
 
+    // ========== FUNÇÃO DE FALA COM VOZ MELHORADA ==========
     function falar(texto) {
         return new Promise((resolve) => {
             if (falandoAtualmente) {
@@ -69,12 +66,52 @@
             }
             falandoAtualmente = true;
             window.speechSynthesis.cancel();
+
             let textoLimpo = limparMovimentos(texto);
             if (textoLimpo.length === 0) textoLimpo = "Au au!";
+
             const utterance = new SpeechSynthesisUtterance(textoLimpo);
             utterance.lang = 'pt-BR';
-            utterance.rate = 0.9;
-            utterance.pitch = 1.2;
+            utterance.rate = 0.95;        // Velocidade um pouco mais natural
+            utterance.pitch = 1.4;         // Tom agudo (voz de criança)
+
+            // Tenta carregar as vozes disponíveis (alguns navegadores precisam de um pequeno delay)
+            let vozes = window.speechSynthesis.getVoices();
+            if (vozes.length === 0) {
+                // Se ainda não carregou, aguarda um pouco
+                window.speechSynthesis.onvoiceschanged = () => {
+                    vozes = window.speechSynthesis.getVoices();
+                    escolherVoz(utterance, vozes);
+                };
+            } else {
+                escolherVoz(utterance, vozes);
+            }
+
+            function escolherVoz(utterance, vozes) {
+                // Prioriza voz feminina em português do Brasil
+                let vozPtBrFeminina = vozes.find(v => 
+                    v.lang === 'pt-BR' && 
+                    (v.name.toLowerCase().includes('female') || 
+                     v.name.toLowerCase().includes('mulher') ||
+                     v.name.toLowerCase().includes('maria') ||
+                     v.name.toLowerCase().includes('samantha') ||
+                     v.name.toLowerCase().includes('google português feminino'))
+                );
+                if (vozPtBrFeminina) {
+                    utterance.voice = vozPtBrFeminina;
+                    addLog(`🎤 Voz selecionada: ${vozPtBrFeminina.name}`);
+                } else {
+                    // Caso não encontre, tenta qualquer voz pt-BR
+                    let vozPtBr = vozes.find(v => v.lang === 'pt-BR');
+                    if (vozPtBr) {
+                        utterance.voice = vozPtBr;
+                        addLog(`🎤 Voz selecionada: ${vozPtBr.name}`);
+                    } else {
+                        addLog(`🎤 Usando voz padrão do sistema (nenhuma voz pt-BR encontrada)`);
+                    }
+                }
+            }
+
             utterance.onstart = () => {
                 addLog(`🗣️ Falando: "${textoLimpo.substring(0, 80)}"`);
                 vEsp.classList.remove('ativo');
@@ -89,24 +126,22 @@
                 statusDiv.innerText = "🎧 Ouvindo...";
                 falandoAtualmente = false;
                 resolve();
-                // Aguarda um pouco para não sobrecarregar e reinicia escuta
                 setTimeout(() => {
-                    if (escutaAtiva === false && btnReiniciar.style.display !== 'none') {
+                    if (!escutaAtiva && btnReiniciar.style.display !== 'none') {
                         iniciarEscuta();
                     }
-                }, 300);
+                }, 500);
             };
             utterance.onerror = (err) => {
                 addLog(`Erro fala: ${err.error}`, true);
                 falandoAtualmente = false;
                 resolve();
-                setTimeout(() => iniciarEscuta(), 500);
+                setTimeout(() => iniciarEscuta(), 800);
             };
             window.speechSynthesis.speak(utterance);
         });
     }
 
-    // Respostas locais de emergência
     function respostaLocal(pergunta) {
         const p = pergunta.toLowerCase();
         if (p.includes("oi") || p.includes("olá")) return "Au au! Oi, amigo!";
@@ -126,7 +161,7 @@
             const payload = {
                 model: "open-mistral-7b",
                 messages: [
-                    { role: "system", content: "Você é um cachorro chamado Bootfriend. Responda SOMENTE com a fala do cachorro, NUNCA descreva ações. Proibido usar asteriscos. Proibido falar de rabo, pata, balançar, latir, etc. Frases curtas, máximo 2 frases. Use 'au au' com moderação." },
+                    { role: "system", content: "Você é um cachorro chamado Bootfriend. Responda SOMENTE com a fala do cachorro, NUNCA descreva ações. Proibido usar asteriscos. Proibido falar de rabo, pata, balançar, etc. Frases curtas, máximo 2 frases. Use 'au au' com moderação." },
                     { role: "user", content: pergunta }
                 ],
                 temperature: 0.5,
@@ -157,53 +192,87 @@
     }
 
     function iniciarEscuta() {
-        if (falandoAtualmente) {
-            addLog("⏳ Aguardando fim da fala para escutar...");
-            return;
-        }
-        if (escutaAtiva) {
-            try { recognition?.stop(); } catch(e) {}
-        }
+        if (falandoAtualmente) return;
+        if (escutaAtiva) return;
         const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRec) { addLog("❌ Microfone não suportado.", true); return; }
-        recognition = new SpeechRec();
-        recognition.lang = 'pt-BR';
-        recognition.continuous = false;
-        recognition.interimResults = false;
-        recognition.onstart = () => { escutaAtiva = true; addLog("🎤 Microfone ativo - fale agora"); statusDiv.innerText = "🎙️ Escutando..."; };
-        recognition.onerror = (e) => {
-            addLog(`Erro microfone: ${e.error}`, true);
+        
+        try {
+            recognition = new SpeechRec();
+            recognition.lang = 'pt-BR';
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+            
+            recognition.onstart = () => {
+                escutaAtiva = true;
+                tentativaReinicio = false;
+                addLog("🎤 Microfone ativo - fale agora");
+                statusDiv.innerText = "🎙️ Escutando...";
+            };
+            recognition.onerror = (e) => {
+                addLog(`Erro microfone: ${e.error}`, true);
+                escutaAtiva = false;
+                if (e.error === 'no-speech') {
+                    if (!tentativaReinicio) {
+                        tentativaReinicio = true;
+                        setTimeout(() => { 
+                            tentativaReinicio = false;
+                            if (!falandoAtualmente && btnReiniciar.style.display !== 'none') iniciarEscuta(); 
+                        }, 2000);
+                    }
+                } else if (e.error === 'aborted') {
+                    addLog("Reconhecimento abortado - pode ser problema de permissão", true);
+                    statusDiv.innerText = "🔇 Clique em REINICIAR se necessário";
+                } else if (e.error === 'not-allowed') {
+                    addLog("Permissão do microfone negada. Recarregue a página.", true);
+                    statusDiv.innerText = "🔇 Permissão negada - recarregue";
+                } else {
+                    if (!tentativaReinicio) {
+                        tentativaReinicio = true;
+                        setTimeout(() => { 
+                            tentativaReinicio = false;
+                            if (!falandoAtualmente && btnReiniciar.style.display !== 'none') iniciarEscuta(); 
+                        }, 3000);
+                    }
+                }
+            };
+            recognition.onend = () => {
+                addLog("🎤 Microfone desligado");
+                escutaAtiva = false;
+                if (!falandoAtualmente && btnReiniciar.style.display !== 'none') {
+                    setTimeout(() => {
+                        if (!escutaAtiva && !falandoAtualmente && btnReiniciar.style.display !== 'none') {
+                            iniciarEscuta();
+                        }
+                    }, 1000);
+                }
+            };
+            recognition.onresult = async (event) => {
+                const fala = event.results[0][0].transcript;
+                addLog(`🎙️ Você: "${fala}"`);
+                statusDiv.innerText = "💭 Pensando...";
+                recognition.stop();
+                escutaAtiva = false;
+                const resposta = await perguntarMistral(fala);
+                await falar(resposta);
+            };
+            recognition.start();
+        } catch (err) {
+            addLog(`Falha ao iniciar reconhecimento: ${err.message}`, true);
             escutaAtiva = false;
-            if (e.error === 'no-speech') {
-                setTimeout(() => { if (!falandoAtualmente && btnReiniciar.style.display !== 'none') iniciarEscuta(); }, 1500);
-            } else if (e.error === 'network') {
-                setTimeout(() => { if (!falandoAtualmente && btnReiniciar.style.display !== 'none') iniciarEscuta(); }, 2000);
-            }
-        };
-        recognition.onend = () => {
-            addLog("🎤 Microfone desligado");
-            escutaAtiva = false;
-            if (!falandoAtualmente && btnReiniciar.style.display !== 'none') {
-                setTimeout(iniciarEscuta, 800);
-            }
-        };
-        recognition.onresult = async (event) => {
-            const fala = event.results[0][0].transcript;
-            addLog(`🎙️ Você: "${fala}"`);
-            statusDiv.innerText = "💭 Pensando...";
-            recognition.stop();
-            escutaAtiva = false;
-            const resposta = await perguntarMistral(fala);
-            await falar(resposta);
-        };
-        try { recognition.start(); } catch(err) { addLog(`Falha: ${err}`, true); escutaAtiva = false; }
+        }
     }
 
     function reiniciar() {
         window.speechSynthesis.cancel();
         falandoAtualmente = false;
-        if (recognition) { try { recognition.stop(); } catch(e) {} }
+        if (recognition) {
+            try { recognition.stop(); } catch(e) {}
+            recognition = null;
+        }
         escutaAtiva = false;
+        tentativaReinicio = false;
         vFal.classList.remove('ativo');
         vEsp.classList.add('ativo');
         vEsp.play().catch(e => addLog(`Vídeo: ${e.message}`, true));
@@ -215,13 +284,13 @@
     btnIniciar.onclick = async () => {
         btnIniciar.style.display = "none";
         btnReiniciar.style.display = "inline-block";
-        addLog("🎬 Iniciando...");
+        addLog("🎬 Iniciando Bootfriend...");
         vEsp.load(); vFal.load();
         try { await vEsp.play(); } catch(e) { addLog("⚠️ Vídeo não tocou automático", true); }
         await falar("Oi, amigo! Estou pronto! Pode falar comigo.");
     };
     btnReiniciar.onclick = reiniciar;
-    addLog("🔑 Bootfriend versão estável - sem movimentos e com reconexão automática");
+    addLog("🔑 Bootfriend - com voz de criança (pitch alto e busca por voz feminina)");
 </script>
 </body>
 </html>
